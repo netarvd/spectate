@@ -248,6 +248,187 @@ def test_spec_from_plan_empty_file_exits_2(tmp_path: Path) -> None:
     assert not out.exists()
 
 
+EXISTING_SPEC = "version: 1\nnetwork:\n  outbound:\n    allowed:\n      - api.stripe.com\n"
+
+
+def _write_existing(tmp_path: Path) -> Path:
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text(EXISTING_SPEC)
+    return out
+
+
+def test_spec_update_no_existing_spec_errors(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "update", "anything", "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 2
+    combined = result.stdout + (result.stderr or "")
+    assert "spec init" in combined
+
+
+def test_spec_update_requires_english_or_from_plan(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    out = _write_existing(tmp_path)
+    result = runner.invoke(app, ["spec", "update", "--yes", "--output", str(out)])
+    assert result.exit_code == 2
+
+
+def test_spec_update_rejects_both_english_and_from_plan(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    out = _write_existing(tmp_path)
+    plan = tmp_path / "plan.md"
+    plan.write_text("change: x\n")
+    result = runner.invoke(
+        app,
+        [
+            "spec",
+            "update",
+            "english",
+            "--from-plan",
+            str(plan),
+            "--yes",
+            "--output",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 2
+
+
+def test_spec_update_applies_addition_yes(tmp_path: Path) -> None:
+    delta = "version: 1\nnetwork:\n  outbound:\n    allowed:\n      - api.openai.com\n"
+    cli_module._set_llm_client_factory(lambda: _StubClient(output=delta))
+    out = _write_existing(tmp_path)
+    result = runner.invoke(
+        app,
+        ["spec", "update", "also call openai", "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    new_text = out.read_text()
+    assert "api.stripe.com" in new_text
+    assert "api.openai.com" in new_text
+
+
+def test_spec_update_conflict_aborts_and_does_not_write(tmp_path: Path) -> None:
+    delta = "version: 1\nnetwork:\n  outbound:\n    forbidden:\n      - api.stripe.com\n"
+    cli_module._set_llm_client_factory(lambda: _StubClient(output=delta))
+    out = _write_existing(tmp_path)
+    original = out.read_text()
+    result = runner.invoke(
+        app,
+        ["spec", "update", "ban stripe", "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 1
+    assert out.read_text() == original
+    combined = result.stdout + (result.stderr or "")
+    assert "Conflict" in combined or "conflict" in combined
+
+
+def test_spec_update_empty_delta_is_noop(tmp_path: Path) -> None:
+    delta = "version: 1\n"
+    cli_module._set_llm_client_factory(lambda: _StubClient(output=delta))
+    out = _write_existing(tmp_path)
+    original = out.read_text()
+    result = runner.invoke(
+        app,
+        ["spec", "update", "no actual change", "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 0
+    assert out.read_text() == original
+    assert "Nothing to apply" in result.stdout
+
+
+def test_spec_update_interactive_accepts_addition(tmp_path: Path) -> None:
+    delta = "version: 1\nfs:\n  read:\n    allowed:\n      - /etc/config.yaml\n"
+    cli_module._set_llm_client_factory(lambda: _StubClient(output=delta))
+    out = _write_existing(tmp_path)
+    result = runner.invoke(
+        app,
+        ["spec", "update", "reads config", "--output", str(out)],
+        input="y\ny\n",
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "/etc/config.yaml" in out.read_text()
+
+
+def test_spec_update_interactive_rejects_all(tmp_path: Path) -> None:
+    delta = "version: 1\nfs:\n  read:\n    allowed:\n      - /etc/config.yaml\n"
+    cli_module._set_llm_client_factory(lambda: _StubClient(output=delta))
+    out = _write_existing(tmp_path)
+    original = out.read_text()
+    result = runner.invoke(
+        app,
+        ["spec", "update", "reads config", "--output", str(out)],
+        input="n\n",
+    )
+    assert result.exit_code == 0
+    assert out.read_text() == original
+    assert "No changes accepted" in result.stdout
+
+
+def test_spec_update_existing_invalid_spec_errors(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("version: 1\nbogus: 1\n")
+    result = runner.invoke(
+        app,
+        ["spec", "update", "anything", "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 2
+    assert "invalid" in (result.stdout + (result.stderr or ""))
+
+
+def test_spec_update_from_plan(tmp_path: Path) -> None:
+    delta = "version: 1\nimports:\n  allowed:\n    - httpx\n"
+
+    captured: dict[str, str] = {}
+
+    class _Capture(_StubClient):
+        def __init__(self) -> None:
+            super().__init__(output=delta)
+
+        def generate_spec(self, english: str) -> str:
+            captured["english"] = english
+            return super().generate_spec(english)
+
+    cli_module._set_llm_client_factory(_Capture)
+    out = _write_existing(tmp_path)
+    plan = tmp_path / "plan.md"
+    plan.write_text("# Plan\n\nUses httpx now.\n")
+    result = runner.invoke(
+        app,
+        [
+            "spec",
+            "update",
+            "--from-plan",
+            str(plan),
+            "--yes",
+            "--output",
+            str(out),
+        ],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert "httpx" in out.read_text()
+    assert "EXISTING SPEC" in captured["english"]
+    assert "CHANGE REQUEST" in captured["english"]
+    assert "Uses httpx now" in captured["english"]
+
+
+def test_spec_update_claude_missing_exits_with_message(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_RaisingClient)
+    out = _write_existing(tmp_path)
+    result = runner.invoke(
+        app,
+        ["spec", "update", "x", "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 2
+    assert "Claude Code" in (result.stdout + (result.stderr or ""))
+
+
 def test_spec_transcribe() -> None:
     result = runner.invoke(app, ["spec", "transcribe", "./some/path"])
     assert result.exit_code == 0

@@ -7,11 +7,18 @@ import typer
 from spectate import __version__
 from spectate.spec import (
     ClaudeNotFoundError,
+    DeltaError,
     LLMClient,
     SkillClient,
     SkillInvocationError,
+    apply_diff,
+    compute_diff,
+    format_diff,
+    parse_yaml,
+    to_yaml,
     validate,
 )
+from spectate.spec.update import Change, Diff
 
 app = typer.Typer(
     name="spectate",
@@ -179,6 +186,153 @@ def spec_from_plan(
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(yaml_text)
+    typer.echo(f"Wrote {output}")
+
+
+_UPDATE_ENGLISH_ARG = typer.Argument(None, help="English description of the change to apply.")
+_UPDATE_FROM_PLAN_OPTION = typer.Option(
+    None,
+    "--from-plan",
+    help="Path to a plan markdown file describing the change.",
+)
+
+
+def _filter_diff_interactive(diff: Diff) -> Diff:
+    """Walk additions and removals, prompting per-change. Returns a new Diff
+    containing only the entries the user accepted. Conflicts are not offered
+    here — they must be resolved upstream."""
+    kept_adds: list[Change] = []
+    kept_rems: list[Change] = []
+    for change in diff.additions:
+        prompt = f"Apply addition {change.where.display()}.{change.slot}: {change.display_value()}?"
+        if typer.confirm(prompt, default=True):
+            kept_adds.append(change)
+    for change in diff.removals:
+        prompt = f"Apply removal {change.where.display()}.{change.slot}: {change.display_value()}?"
+        if typer.confirm(prompt, default=True):
+            kept_rems.append(change)
+    return Diff(additions=kept_adds, removals=kept_rems, conflicts=[], noops=diff.noops)
+
+
+@spec_app.command("update")
+def spec_update(
+    english: str | None = _UPDATE_ENGLISH_ARG,
+    from_plan: Path | None = _UPDATE_FROM_PLAN_OPTION,
+    yes: bool = _YES_OPTION,
+    output: Path = _OUTPUT_OPTION,
+) -> None:
+    """Smart upsert against an existing Spec.
+
+    Either pass an English change description as the argument, or use
+    ``--from-plan`` to point at a markdown plan describing the change.
+    """
+    if (english is None) == (from_plan is None):
+        typer.echo(
+            "Provide either an english description argument OR --from-plan <path>, not both.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    if not output.exists():
+        typer.echo(
+            f"No existing Spec at {output}. Run `spectate spec init` first.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    existing_text = output.read_text()
+    existing_result = validate(existing_text)
+    if not existing_result.ok:
+        typer.echo(f"Existing Spec at {output} is invalid; refusing to update.", err=True)
+        for err in existing_result.errors:
+            typer.echo(f"  {err.path}: {err.message}", err=True)
+        raise typer.Exit(code=2)
+    existing_doc = parse_yaml(existing_text)
+
+    if from_plan is not None:
+        if not from_plan.exists():
+            typer.echo(f"Plan file not found: {from_plan}", err=True)
+            raise typer.Exit(code=2)
+        change_text = from_plan.read_text()
+        if not change_text.strip():
+            typer.echo(f"Plan file is empty: {from_plan}", err=True)
+            raise typer.Exit(code=2)
+    else:
+        assert english is not None
+        change_text = english
+
+    prompt_body = (
+        f"EXISTING SPEC:\n{existing_text.rstrip()}\n\nCHANGE REQUEST:\n{change_text.rstrip()}\n"
+    )
+
+    client = _build_client("spec-update")
+    try:
+        delta_yaml = client.generate_spec(prompt_body)
+    except ClaudeNotFoundError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=2) from exc
+    except SkillInvocationError as exc:
+        typer.echo(f"spec-update skill failed: {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    try:
+        delta_doc = parse_yaml(delta_yaml)
+    except DeltaError as exc:
+        typer.echo(f"Skill emitted malformed delta YAML: {exc}", err=True)
+        typer.echo("\n--- raw skill output ---", err=True)
+        typer.echo(delta_yaml, err=True)
+        raise typer.Exit(code=1) from exc
+
+    try:
+        diff = compute_diff(existing_doc, delta_doc)
+    except DeltaError as exc:
+        typer.echo(f"Delta is structurally invalid: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    typer.echo("Proposed changes:")
+    typer.echo(format_diff(diff))
+
+    if diff.conflicts:
+        typer.echo(
+            "\nConflicts detected — resolve manually by editing the Spec, "
+            "then re-run. Refusing to silently overwrite.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    if diff.empty:
+        typer.echo("Nothing to apply.")
+        raise typer.Exit(code=0)
+
+    applied = diff if yes else _filter_diff_interactive(diff)
+
+    if applied.empty:
+        typer.echo("No changes accepted; Spec untouched.")
+        raise typer.Exit(code=0)
+
+    merged = apply_diff(existing_doc, applied)
+    merged_yaml = to_yaml(merged)
+
+    result = validate(merged_yaml)
+    if not result.ok:
+        typer.echo("Merged Spec failed validation:", err=True)
+        for err in result.errors:
+            line = f"  {err.path}: {err.message}"
+            if err.suggestion:
+                line += f"  ({err.suggestion})"
+            typer.echo(line, err=True)
+        typer.echo("\n--- merged YAML ---", err=True)
+        typer.echo(merged_yaml, err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo("\nMerged Spec:")
+    typer.echo(merged_yaml.rstrip())
+
+    if not yes and not typer.confirm(f"\nWrite to {output}?", default=True):
+        typer.echo("Aborted; no file written.")
+        raise typer.Exit(code=0)
+
+    output.write_text(merged_yaml)
     typer.echo(f"Wrote {output}")
 
 
