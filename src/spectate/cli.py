@@ -102,9 +102,16 @@ def spec_init(
     typer.echo("Generated Spec:")
     typer.echo(yaml_text.rstrip())
 
-    if not yes and not typer.confirm(f"\nWrite to {output}?", default=True):
-        typer.echo("Aborted; no file written.")
-        raise typer.Exit(code=0)
+    exists = output.exists()
+    if not yes:
+        if exists:
+            prompt = f"\n{output} already exists. Overwrite?"
+            confirmed = typer.confirm(prompt, default=False)
+        else:
+            confirmed = typer.confirm(f"\nWrite to {output}?", default=True)
+        if not confirmed:
+            typer.echo("Aborted; no file written.")
+            raise typer.Exit(code=0)
 
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(yaml_text)

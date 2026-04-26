@@ -88,6 +88,48 @@ def test_spec_init_confirm_yes_writes(tmp_path: Path) -> None:
     assert out.exists()
 
 
+def test_spec_init_existing_file_default_no_aborts(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("existing: spec\n")
+    result = runner.invoke(
+        app,
+        ["spec", "init", "anything", "--output", str(out)],
+        input="\n",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "already exists. Overwrite?" in result.stdout
+    assert out.read_text() == "existing: spec\n"
+
+
+def test_spec_init_existing_file_explicit_yes_overwrites(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("existing: spec\n")
+    result = runner.invoke(
+        app,
+        ["spec", "init", "anything", "--output", str(out)],
+        input="y\n",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert out.read_text() == VALID_YAML
+
+
+def test_spec_init_existing_file_yes_flag_overwrites(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("existing: spec\n")
+    result = runner.invoke(
+        app,
+        ["spec", "init", "anything", "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert out.read_text() == VALID_YAML
+
+
 def test_spec_init_validation_failure_exits_nonzero(tmp_path: Path) -> None:
     class BadClient(_StubClient):
         def __init__(self) -> None:
