@@ -153,6 +153,101 @@ def test_spec_init_claude_missing_exits_with_message() -> None:
     assert "Claude Code" in (result.stdout + (result.stderr or ""))
 
 
+PLAN_TEXT = "# Plan\n\nThe service must call api.stripe.com.\n"
+
+
+def test_spec_from_plan_writes_on_yes(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    plan = tmp_path / "plan.md"
+    plan.write_text(PLAN_TEXT)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "from-plan", str(plan), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert out.exists()
+    assert out.read_text() == VALID_YAML
+    assert _StubClient.last_english == PLAN_TEXT
+
+
+def test_spec_from_plan_existing_file_default_no_aborts(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    plan = tmp_path / "plan.md"
+    plan.write_text(PLAN_TEXT)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("existing: spec\n")
+    result = runner.invoke(
+        app,
+        ["spec", "from-plan", str(plan), "--output", str(out)],
+        input="\n",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "already exists. Overwrite?" in result.stdout
+    assert out.read_text() == "existing: spec\n"
+
+
+def test_spec_from_plan_existing_file_yes_flag_overwrites(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    plan = tmp_path / "plan.md"
+    plan.write_text(PLAN_TEXT)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("existing: spec\n")
+    result = runner.invoke(
+        app,
+        ["spec", "from-plan", str(plan), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert out.read_text() == VALID_YAML
+
+
+def test_spec_from_plan_validation_failure_exits_nonzero(tmp_path: Path) -> None:
+    class BadClient(_StubClient):
+        def __init__(self) -> None:
+            super().__init__(output=INVALID_YAML)
+
+    cli_module._set_llm_client_factory(BadClient)
+    plan = tmp_path / "plan.md"
+    plan.write_text(PLAN_TEXT)
+    out = tmp_path / ".spectate" / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "from-plan", str(plan), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 1
+    assert not out.exists()
+    assert "failed validation" in (result.stdout + (result.stderr or ""))
+
+
+def test_spec_from_plan_missing_file_exits_2(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    plan = tmp_path / "does-not-exist.md"
+    out = tmp_path / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "from-plan", str(plan), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 2
+    assert "not found" in (result.stdout + (result.stderr or ""))
+    assert not out.exists()
+
+
+def test_spec_from_plan_empty_file_exits_2(tmp_path: Path) -> None:
+    cli_module._set_llm_client_factory(_StubClient)
+    plan = tmp_path / "empty.md"
+    plan.write_text("   \n\n")
+    out = tmp_path / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "from-plan", str(plan), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 2
+    assert "empty" in (result.stdout + (result.stderr or ""))
+    assert not out.exists()
+
+
 def test_spec_transcribe() -> None:
     result = runner.invoke(app, ["spec", "transcribe", "./some/path"])
     assert result.exit_code == 0

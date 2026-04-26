@@ -131,6 +131,29 @@ def test_default_skill_dir_materializes_dotclaude_layout(tmp_path: Path, monkeyp
     assert "Spectate Spec" in body
 
 
+def test_skill_parameter_drives_prompt_and_materialized_dir(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("tempfile.gettempdir", lambda: str(tmp_path))
+    captured: dict[str, Any] = {}
+
+    def fake_run(argv: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        captured["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="version: 1\n", stderr="")
+
+    client = SkillClient(skill="spec-from-plan")
+    with (
+        patch("spectate.spec.llm.shutil.which", return_value="/usr/bin/claude"),
+        patch("spectate.spec.llm.subprocess.run", side_effect=fake_run),
+    ):
+        client.generate_spec("plan body")
+
+    argv = captured["argv"]
+    prompt = argv[argv.index("-p") + 1]
+    assert "spec-from-plan" in prompt
+    assert "spec-init" not in prompt
+    add_dir = Path(argv[argv.index("--add-dir") + 1])
+    assert (add_dir / ".claude" / "skills" / "spec-from-plan").exists()
+
+
 @pytest.mark.skipif(shutil.which("claude") is None, reason="claude CLI not on PATH")
 def test_integration_generates_valid_spec() -> None:
     client = SkillClient()
