@@ -1,25 +1,26 @@
 from __future__ import annotations
 
 import json
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Literal, Union
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 SCHEMA_PATH = Path(__file__).with_name("spec.schema.json")
 
 
-def load_schema() -> dict:
+def load_schema() -> dict[str, Any]:
     with SCHEMA_PATH.open() as fh:
-        return json.load(fh)
+        data: dict[str, Any] = json.load(fh)
+        return data
 
 
 class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class UnresolvedHandling(str, Enum):
+class UnresolvedHandling(StrEnum):
     SURFACE = "surface"
     FLAG = "flag"
     DROP = "drop"
@@ -30,7 +31,7 @@ class ScopedRequired(_Strict):
     value: str = Field(min_length=1)
 
 
-RequiredEntry = Annotated[Union[str, ScopedRequired], Field(union_mode="left_to_right")]
+RequiredEntry = Annotated[str | ScopedRequired, Field(union_mode="left_to_right")]
 
 
 class EffectSlots(_Strict):

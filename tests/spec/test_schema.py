@@ -26,7 +26,9 @@ def _load(path: Path) -> dict:
 
 
 @pytest.mark.parametrize("filename", EXAMPLE_FILES)
-def test_example_validates_against_jsonschema(validator: Draft202012Validator, filename: str) -> None:
+def test_example_validates_against_jsonschema(
+    validator: Draft202012Validator, filename: str
+) -> None:
     data = _load(EXAMPLES_DIR / filename)
     errors = sorted(validator.iter_errors(data), key=lambda e: e.path)
     assert errors == [], "\n".join(f"{list(e.path)}: {e.message}" for e in errors)

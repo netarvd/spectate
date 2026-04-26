@@ -47,3 +47,6 @@ Thumbs.db
 
 # Local Spectate state
 .spectate/cache/
+
+# Agent worktrees from Claude Code
+.claude/worktrees/

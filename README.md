@@ -21,6 +21,7 @@ git clone https://github.com/netaarvd/spectate
 cd spectate
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+pre-commit install
 
 ruff check .
 ruff format --check .
