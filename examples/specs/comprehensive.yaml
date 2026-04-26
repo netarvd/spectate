@@ -1,0 +1,76 @@
+version: 1
+unresolved_handling: surface
+stdlib_auto_allow: true
+
+network:
+  outbound:
+    required:
+      - api.example.com
+    allowed:
+      - "*.example.com"
+      - cdn.example.net
+    forbidden:
+      - "*.evil.com"
+
+fs:
+  read:
+    required:
+      - ./config.yaml
+    allowed:
+      - ./data/**
+    forbidden:
+      - /etc/shadow
+  write:
+    required:
+      - handler: jobs/exporter.py::run
+        value: ./out/report.csv
+    allowed:
+      - /tmp/**
+    forbidden:
+      - /etc/**
+
+subprocess:
+  required:
+    - git
+  allowed:
+    - rg
+    - jq
+  forbidden:
+    - curl
+    - wget
+
+imports:
+  required:
+    - requests
+  allowed:
+    - httpx
+    - pydantic
+  forbidden:
+    - pickle
+
+env:
+  read:
+    required:
+      - OPENAI_API_KEY
+    allowed:
+      - LOG_LEVEL
+      - HOME
+    forbidden:
+      - AWS_SECRET_ACCESS_KEY
+
+db:
+  read:
+    required:
+      - users
+    allowed:
+      - sessions
+    forbidden:
+      - audit_log
+  write:
+    required:
+      - handler: jobs/exporter.py::run
+        value: exports
+    allowed:
+      - sessions
+    forbidden:
+      - users

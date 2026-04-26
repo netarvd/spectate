@@ -1,0 +1,20 @@
+version: 1
+
+# Vanished-auth-check demo: every handler in auth/views.py must call
+# the session-validation helper. Spectate flags any handler missing it.
+
+network:
+  outbound:
+    allowed:
+      - api.example.com
+
+subprocess:
+  required:
+    - handler: auth/views.py::login
+      value: session-check
+    - handler: auth/views.py::logout
+      value: session-check
+    - handler: auth/views.py::reset_password
+      value: session-check
+  allowed:
+    - session-check
