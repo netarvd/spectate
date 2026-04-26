@@ -58,11 +58,7 @@ class EnvWatcher:
 
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 func = node.func
-                if (
-                    func.attr in {"get", "setdefault"}
-                    and _is_os_environ(func.value)
-                    and node.args
-                ):
+                if func.attr in {"get", "setdefault"} and _is_os_environ(func.value) and node.args:
                     literal = _literal_str(node.args[0])
                     emit(literal if literal is not None else UNRESOLVED, node.lineno)
                     continue

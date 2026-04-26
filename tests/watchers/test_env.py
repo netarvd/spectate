@@ -67,7 +67,7 @@ def test_no_env_access(tmp_path):
 
 
 def test_string_mention_only(tmp_path):
-    src = '''msg = "we read os.environ in production"\nprint(msg)\n'''
+    src = """msg = "we read os.environ in production"\nprint(msg)\n"""
     assert _observe(tmp_path, src) == []
 
 
@@ -133,12 +133,7 @@ def test_syntax_error_returns_empty(tmp_path):
 
 
 def test_multiple_accesses_distinct_lines(tmp_path):
-    src = (
-        "import os\n"
-        "a = os.environ['A']\n"
-        "b = os.getenv('B')\n"
-        "c = os.environ.get('C', 'x')\n"
-    )
+    src = "import os\na = os.environ['A']\nb = os.getenv('B')\nc = os.environ.get('C', 'x')\n"
     obs = _observe(tmp_path, src)
     assert [(o.parameter, o.line) for o in obs] == [
         ("A", 2),
