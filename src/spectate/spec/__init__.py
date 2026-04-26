@@ -11,6 +11,7 @@ from spectate.spec.models import (
     UnresolvedHandling,
     load_schema,
 )
+from spectate.spec.validate import SpecError, ValidationResult, validate
 
 __all__ = [
     "SCHEMA_PATH",
@@ -22,6 +23,9 @@ __all__ = [
     "RequiredEntry",
     "ScopedRequired",
     "Spec",
+    "SpecError",
     "UnresolvedHandling",
+    "ValidationResult",
     "load_schema",
+    "validate",
 ]
