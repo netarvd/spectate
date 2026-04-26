@@ -43,3 +43,4 @@ This is a project-wide working rule. See `CLAUDE.md`.
 | [0001](0001-effect-taxonomy-v1.md) | Effect taxonomy v1 | Accepted |
 | [0002](0002-spec-schema-v1.md) | Spec YAML schema v1 | Accepted |
 | [0003](0003-project-skeleton-and-tooling.md) | Project skeleton and tooling | Accepted |
+| [0004](0004-claude-code-skills-as-llm-api.md) | Claude Code skills as the LLM API for The Spec authoring stage | Accepted |
