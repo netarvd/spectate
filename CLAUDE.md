@@ -36,9 +36,16 @@ Runtime tools audit *behavior* and require the developer to mentally reconstruct
 - `spectate review [path]` — Watch + Critique + Bulletin in one command
 - `spectate accept <finding-id>` — accept a Finding into the Spec
 
+## Architecture Decision Records
+
+Every locked support/unsupport decision lives in `docs/decisions/` as a numbered, immutable ADR. When a decision raised in your PR is locked (user review or merge), capture it there using the next free number — copy `0000-template.md`, fill it in, link the PR. Bundle related sub-decisions into the same ADR if they share rationale; otherwise split. Never silently lock a decision without an ADR.
+
+Components are versioned independently (taxonomy v1 in `docs/taxonomy.md`, Spec schema v1 in `src/spectate/spec/spec.schema.json`). Adding optional fields doesn't bump; breaking changes do, and trigger a new ADR superseding the old one. See `docs/decisions/README.md` for the full versioning policy.
+
 ## For agents working in this repo
 
 - **Output value-first.** Every PR description must answer three things: what code was added, what value it delivers (one line), exactly how the user can verify it works.
 - **Raise, don't decide.** When you encounter a contested design choice, surface it in the PR description with options and a recommendation. Never decide silently in the Foundation phase. In later phases, prefer raising over deciding when uncertain.
+- **Document locked decisions.** When the user locks a decision in your PR, add an ADR (see above). This is non-optional.
 - **Stay in your stage.** Each task is scoped to one stage (Foundation, The Spec, The Watch, The Critique, The Stage, In the Loop, Curtain Up). Don't expand outside it without flagging.
 - **Be terse.** No emoji unless asked. No comments explaining what well-named code already does. Default to writing no comments at all.
