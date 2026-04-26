@@ -106,7 +106,10 @@ class DeltaError(ValueError):
 
 
 def parse_yaml(text: str) -> dict[str, Any]:
-    data = yaml.safe_load(text)
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise DeltaError(f"invalid YAML: {exc}") from exc
     if data is None:
         return {}
     if not isinstance(data, dict):
