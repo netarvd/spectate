@@ -38,7 +38,7 @@ This document defines the v1 effect categories that Watchers emit and that the S
 - **Captures:** Python import statements.
 - **Sources detected:** `import x`, `import x.y` (top-level `x` captured), `from x import y` (top-level `x` captured), `__import__('x')`, `importlib.import_module('x')` with literal arg.
 - **Normalized form:** top-level package name only. `requests.adapters` → `requests`.
-- **Stdlib tag:** each Observation includes a tag indicating whether the package is in the Python standard library for the running interpreter. Tag does not affect matching; it surfaces in the Bulletin so reviewers can ignore stdlib imports at a glance.
+- **Stdlib handling:** by default, stdlib imports are auto-allowed and don't appear in the Bulletin. A config flag (`stdlib_auto_allow`, default `true`) can disable this, in which case stdlib imports flow through the same Spec slots as third-party packages and carry a `[stdlib]` tag in the Bulletin for visual filtering.
 - **Spec match:** exact package name. No globs at v1 (decision #4).
 - **Example Observations:** `imports(requests)`, `imports(os) [stdlib]`
 - **Known limits:** dynamic imports with non-literal arg emit the unresolved sentinel.
@@ -68,20 +68,13 @@ This document defines the v1 effect categories that Watchers emit and that the S
 
 When a Watcher detects an effect but cannot statically determine its parameter (variable, dynamic dispatch, computed value), it emits an Observation with `*` as the parameter — for example `network.outbound(*)` or `fs.write(*)`.
 
-Spec patterns are **not evaluated** against unresolved Observations. Instead they appear in the Bulletin under a distinct severity: `unresolved` — *"this effect happened, but Spectate cannot tell you what it touched."*
+**Default behavior:** Spec patterns are not evaluated against unresolved Observations. Instead they appear in the Bulletin under a distinct severity: `unresolved` — *"this effect happened, but Spectate cannot tell you what it touched."* This keeps the contract honest: Spectate never pretends to see what it can't see, and never silently passes effects it couldn't identify.
 
-This keeps the contract honest: Spectate never pretends to see what it can't see, and never silently passes effects it couldn't identify.
+**Configurable.** A config flag (`unresolved_handling`, default `surface`) controls behavior:
 
-## Decisions surfaced for approval
-
-The following choices have a recommended default but are not yet locked. Please confirm or override before T02 (Spec schema) lands.
-
-1. **Network host granularity: hostname only, no port.** Most policies care about destination, not port. Apps binding non-standard ports are rare in the target audience. *Override* → add `:port` to the captured value.
-2. **Unresolved-effect handling: emit `effect(*)` and surface as a third severity (`unresolved`)**, neither passing nor flagging as drift. *Override* → silently drop unresolved effects (dishonest, not recommended), or treat them as `added-unspecified` violations (noisier, may train users to disable).
-3. **No tilde expansion or `$HOME` / env-var resolution in fs paths at v1.** Spec authors write what the code writes. *Override* → expand `~` and env vars during normalization (more forgiving but couples Spec to runtime environment).
-4. **No globs in `imports`, `env.read`, `db.*` at v1 — exact match only.** Package, env-var, and table names don't have natural hierarchy that warrants globbing. *Override* → support globs uniformly across all categories.
-5. **Stdlib tag is informational, not a separate category.** Stdlib imports still go through the same Spec slots. *Override* → make stdlib imports auto-allowed and untracked (less noise but less control).
-6. **Path normalization in `fs`: leave paths as written.** Don't resolve relative-to-absolute, don't collapse `./`. Spec authors match what the code says. *Override* → resolve to absolute against the repo root.
+- `surface` *(default)* — emit as `unresolved` severity in the Bulletin.
+- `flag` — treat as `added-unspecified` violations.
+- `drop` — silently exclude from the Bulletin (use only when you've audited the code paths and accept the loss of signal).
 
 ## Out of scope for v1
 
