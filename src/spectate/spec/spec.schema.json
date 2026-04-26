@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spectate.dev/schemas/spec/v1.json",
+  "title": "Spectate Spec",
+  "description": "Closed-world declaration of effects a codebase is permitted to perform.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "Schema version. v1 is the only supported version."
+    },
+    "unresolved_handling": {
+      "enum": ["surface", "flag", "drop"],
+      "default": "surface",
+      "description": "How to render Observations whose parameter could not be statically resolved."
+    },
+    "stdlib_auto_allow": {
+      "type": "boolean",
+      "default": true,
+      "description": "When true, stdlib imports are auto-allowed and suppressed from the Bulletin."
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "outbound": { "$ref": "#/$defs/effectSlots" }
+      }
+    },
+    "fs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read":  { "$ref": "#/$defs/effectSlots" },
+        "write": { "$ref": "#/$defs/effectSlots" }
+      }
+    },
+    "subprocess": { "$ref": "#/$defs/effectSlots" },
+    "imports":    { "$ref": "#/$defs/effectSlots" },
+    "env": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read": { "$ref": "#/$defs/effectSlots" }
+      }
+    },
+    "db": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read":  { "$ref": "#/$defs/effectSlots" },
+        "write": { "$ref": "#/$defs/effectSlots" }
+      }
+    }
+  },
+  "$defs": {
+    "effectSlots": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required":  {
+          "type": "array",
+          "items": { "$ref": "#/$defs/requiredEntry" },
+          "description": "Effects that MUST appear. Either bare strings (repo-wide) or {handler, value} objects (scoped)."
+        },
+        "allowed":   {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "description": "Effects that MAY appear. Suppressed from the Bulletin when present."
+        },
+        "forbidden": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true,
+          "description": "Effects that MUST NOT appear. Reported as high-severity Findings when present."
+        }
+      }
+    },
+    "requiredEntry": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "description": "Unconditional requirement: this effect must appear somewhere in the repo."
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["handler", "value"],
+          "properties": {
+            "handler": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Handler address. Format: 'path/to/file.py::function_name'. A trailing '::*' matches all handlers in the file. A bare 'function_name' matches that function in any file."
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Effect parameter (host, path glob, binary, package, env var, table)."
+            }
+          }
+        }
+      ]
+    }
+  }
+}
