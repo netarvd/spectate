@@ -429,10 +429,105 @@ def test_spec_update_claude_missing_exits_with_message(tmp_path: Path) -> None:
     assert "Claude Code" in (result.stdout + (result.stderr or ""))
 
 
-def test_spec_transcribe() -> None:
-    result = runner.invoke(app, ["spec", "transcribe", "./some/path"])
-    assert result.exit_code == 0
-    assert PLACEHOLDER in result.stdout
+def _stub_observations() -> tuple:
+    from spectate.observations.observation import Observation
+
+    return (
+        Observation(
+            category="network.outbound",
+            parameter="api.example.com",
+            file=Path("a.py"),
+            line=1,
+        ),
+        Observation(
+            category="imports",
+            parameter="httpx",
+            file=Path("a.py"),
+            line=2,
+        ),
+    )
+
+
+@pytest.fixture
+def _stub_aggregate(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib
+
+    agg_module = importlib.import_module("spectate.observations.aggregate")
+    monkeypatch.setattr(agg_module, "aggregate", lambda path, **_kw: _stub_observations())
+
+
+def test_spec_transcribe_path_not_found(tmp_path: Path) -> None:
+    missing = tmp_path / "nope"
+    out = tmp_path / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "transcribe", str(missing), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 2
+    assert "not found" in (result.stdout + (result.stderr or ""))
+    assert not out.exists()
+
+
+def test_spec_transcribe_writes_on_yes(tmp_path: Path, _stub_aggregate: None) -> None:
+    target = tmp_path / "src"
+    target.mkdir()
+    out = tmp_path / ".spectate" / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "transcribe", str(target), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    assert out.exists()
+    body = out.read_text()
+    assert "api.example.com" in body
+    assert "httpx" in body
+    combined = result.stdout + (result.stderr or "")
+    assert "DRAFT" in combined
+
+
+def test_spec_transcribe_default_no_aborts_when_file_exists(
+    tmp_path: Path, _stub_aggregate: None
+) -> None:
+    target = tmp_path / "src"
+    target.mkdir()
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("existing: spec\n")
+    result = runner.invoke(
+        app,
+        ["spec", "transcribe", str(target), "--output", str(out)],
+        input="\n",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "already exists. Overwrite?" in result.stdout
+    assert out.read_text() == "existing: spec\n"
+
+
+def test_spec_transcribe_yes_overwrites(tmp_path: Path, _stub_aggregate: None) -> None:
+    target = tmp_path / "src"
+    target.mkdir()
+    out = tmp_path / ".spectate" / "spec.yaml"
+    out.parent.mkdir(parents=True)
+    out.write_text("existing: spec\n")
+    result = runner.invoke(
+        app,
+        ["spec", "transcribe", str(target), "--yes", "--output", str(out)],
+    )
+    assert result.exit_code == 0, result.stdout
+    assert "api.example.com" in out.read_text()
+
+
+def test_spec_transcribe_confirm_yes_writes(tmp_path: Path, _stub_aggregate: None) -> None:
+    target = tmp_path / "src"
+    target.mkdir()
+    out = tmp_path / ".spectate" / "spec.yaml"
+    result = runner.invoke(
+        app,
+        ["spec", "transcribe", str(target), "--output", str(out)],
+        input="y\n",
+    )
+    assert result.exit_code == 0, result.stdout
+    assert out.exists()
 
 
 def test_review_with_path() -> None:
