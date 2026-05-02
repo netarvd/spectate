@@ -176,7 +176,7 @@ sqlite3.connect("").execute(q)
     assert len(obs) == 1
     assert obs[0].parameter == UNRESOLVED
     assert obs[0].category == "db.read"
-    assert any("non-literal" in t for t in obs[0].tags)
+    assert obs[0].metadata.get("unresolved_reason") == "non-literal"
 
 
 def test_unresolved_fstring_with_variable(tmp_path: Path) -> None:
@@ -188,7 +188,7 @@ sqlite3.connect("").execute(f"SELECT * FROM {table}")
     obs = _observe(tmp_path, src)
     assert len(obs) == 1
     assert obs[0].parameter == UNRESOLVED
-    assert any("non-literal" in t for t in obs[0].tags)
+    assert obs[0].metadata.get("unresolved_reason") == "non-literal"
 
 
 def test_unresolved_malformed_sql(tmp_path: Path) -> None:
@@ -199,7 +199,9 @@ sqlite3.connect("").execute("SELEKT FRUM stuff !!! @@")
     obs = _observe(tmp_path, src)
     assert len(obs) >= 1
     assert all(o.parameter == UNRESOLVED for o in obs)
-    assert any("parse-error" in t or "unsupported" in t for o in obs for t in o.tags)
+    assert any(
+        o.metadata.get("unresolved_reason") in {"parse-error", "unsupported-statement"} for o in obs
+    )
 
 
 # --- Known false-positive cases (documented trade-off) ---------------------
