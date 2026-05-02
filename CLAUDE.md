@@ -49,3 +49,14 @@ Components are versioned independently (taxonomy v1 in `docs/taxonomy.md`, Spec 
 - **Document locked decisions.** When the user locks a decision in your PR, add an ADR (see above). This is non-optional.
 - **Stay in your stage.** Each task is scoped to one stage (Foundation, The Spec, The Watch, The Critique, The Stage, In the Loop, Curtain Up). Don't expand outside it without flagging.
 - **Be terse.** No emoji unless asked. No comments explaining what well-named code already does. Default to writing no comments at all.
+
+## Workflow rules — earned the hard way
+
+These exist because we hit each of them in practice. They are not negotiable.
+
+- **Never run parallel `gh pr merge` on more than one PR.** GitHub serializes squash-merges but silently drops some of them when the queue moves faster than its base-ref recomputation: the dropped PRs end up marked `MERGED` with a valid `mergedAt` and a real squash commit, but the squash commit is **orphan** — never attached to `main`. Symptoms: PR shows merged, branch deleted, but `git log main` doesn't contain the expected commit and the files aren't in the tree. Always merge sequentially, one at a time, waiting for each to land in `main` before invoking the next.
+- **Never fire dependent agents from a non-merged base branch.** Branching new work off an unmerged feature branch creates rolling merge conflicts that compound across every dependent PR. The right pattern is sequential: merge the blocking PR, then fire dependents from `main`. The cost of waiting is much smaller than the cost of untangling 6 cascading conflicts.
+- **Watch the `__init__.py` aggregation pattern.** When N parallel agents each add an import line to the same file at the same alphabetical position, they all conflict against each other. Two solutions: (a) fire serially so each PR sees the previous import on `main`, or (b) strip the `__init__.py` change from each PR and add all imports in one follow-up PR. Pick (b) when N ≥ 3.
+- **Force-push and PR-merge always need explicit user authorization.** The hooks block both by default. The user authorizes per-action — "merge all" applies to the batch open at the time, not to PRs created later. Always re-confirm before merging a freshly-opened PR or force-pushing a branch you didn't just create yourself.
+- **Use absolute, worktree-relative paths inside subagents.** Multiple agents observed `cd`-ing into the main checkout instead of their isolated worktree, which led to cross-agent file pollution. Subagent prompts should explicitly require `cd $WORKTREE_PATH` or absolute paths under it for every Write/Edit/Bash call that touches files.
+- **Verify the actual landed state, not the PR status.** GitHub's `state=MERGED` is a self-report; `git log main` is the ground truth. After every merge wave, do `git ls-tree main` or `git diff origin/main~N..origin/main --stat` to confirm the changes actually landed.
