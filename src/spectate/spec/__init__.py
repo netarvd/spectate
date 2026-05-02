@@ -17,6 +17,8 @@ from spectate.spec.models import (
     UnresolvedHandling,
     load_schema,
 )
+from spectate.spec.serialize import spec_to_yaml
+from spectate.spec.transcribe import observations_to_spec
 from spectate.spec.update import (
     Change,
     Conflict,
@@ -57,7 +59,9 @@ __all__ = [
     "compute_diff",
     "format_diff",
     "load_schema",
+    "observations_to_spec",
     "parse_yaml",
+    "spec_to_yaml",
     "to_yaml",
     "validate",
 ]

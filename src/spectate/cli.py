@@ -14,7 +14,9 @@ from spectate.spec import (
     apply_diff,
     compute_diff,
     format_diff,
+    observations_to_spec,
     parse_yaml,
+    spec_to_yaml,
     to_yaml,
     validate,
 )
@@ -336,10 +338,60 @@ def spec_update(
     typer.echo(f"Wrote {output}")
 
 
+_TRANSCRIBE_PATH_ARGUMENT = typer.Argument(
+    ...,
+    help="File or directory to scan.",
+)
+
+
 @spec_app.command("transcribe")
-def spec_transcribe(path: str = typer.Argument(..., help="Path to existing code.")) -> None:
+def spec_transcribe(
+    path: Path = _TRANSCRIBE_PATH_ARGUMENT,
+    yes: bool = _YES_OPTION,
+    output: Path = _OUTPUT_OPTION,
+) -> None:
     """Bootstrap a draft Spec from existing code."""
-    typer.echo("not implemented yet")
+    if not path.exists():
+        typer.echo(f"Path not found: {path}", err=True)
+        raise typer.Exit(code=2)
+
+    import spectate.watchers  # noqa: F401  populates the Watcher registry
+    from spectate.observations.aggregate import aggregate
+
+    observations = aggregate(path)
+    spec = observations_to_spec(observations)
+    yaml_text = spec_to_yaml(spec)
+
+    result = validate(yaml_text)
+    if not result.ok:
+        typer.echo("Generated Spec failed validation:", err=True)
+        for err in result.errors:
+            line = f"  {err.path}: {err.message}"
+            if err.suggestion:
+                line += f"  ({err.suggestion})"
+            typer.echo(line, err=True)
+        typer.echo("\n--- raw transcribed YAML ---", err=True)
+        typer.echo(yaml_text, err=True)
+        raise typer.Exit(code=1)
+
+    typer.echo("=== DRAFT - review before committing ===", err=True)
+    typer.echo("Transcribed Spec:")
+    typer.echo(yaml_text.rstrip())
+
+    exists = output.exists()
+    if not yes:
+        if exists:
+            prompt = f"\n{output} already exists. Overwrite?"
+            confirmed = typer.confirm(prompt, default=False)
+        else:
+            confirmed = typer.confirm(f"\nWrite to {output}?", default=True)
+        if not confirmed:
+            typer.echo("Aborted; no file written.")
+            raise typer.Exit(code=0)
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(yaml_text)
+    typer.echo(f"Wrote {output}")
 
 
 @app.command("review")
