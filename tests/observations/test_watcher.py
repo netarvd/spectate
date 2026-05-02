@@ -1,8 +1,6 @@
 from collections.abc import Iterable
 from pathlib import Path
 
-import pytest
-
 from spectate.observations import (
     Observation,
     Watcher,
@@ -20,18 +18,12 @@ class _StubWatcher:
         return ()
 
 
-@pytest.fixture(autouse=True)
-def _isolated_registry() -> Iterable[None]:
-    clear_registry()
-    yield
-    clear_registry()
-
-
 def test_stub_satisfies_protocol() -> None:
     assert isinstance(_StubWatcher("x"), Watcher)
 
 
 def test_register_appends_to_registry() -> None:
+    clear_registry()
     a = _StubWatcher("a")
     b = _StubWatcher("b")
     register_watcher(a)
@@ -40,11 +32,13 @@ def test_register_appends_to_registry() -> None:
 
 
 def test_register_returns_the_watcher_unchanged() -> None:
+    clear_registry()
     w = _StubWatcher("a")
     assert register_watcher(w) is w
 
 
 def test_register_is_idempotent_on_duplicate_name() -> None:
+    clear_registry()
     first = _StubWatcher("dup")
     second = _StubWatcher("dup")
     register_watcher(first)

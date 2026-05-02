@@ -139,10 +139,6 @@ def test_shell_true_with_list_takes_element_zero(
 
 
 def test_registered_on_import() -> None:
-    import importlib
-
-    import spectate.watchers.subprocess_ as subprocess_module
     from spectate.observations import all_watchers
 
-    importlib.reload(subprocess_module)
     assert any(w.name == "subprocess" for w in all_watchers())

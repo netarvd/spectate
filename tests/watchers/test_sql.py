@@ -241,13 +241,8 @@ def test_watcher_name() -> None:
 
 
 def test_watcher_registered() -> None:
-    import importlib
+    from spectate.observations import all_watchers
 
-    import spectate.watchers.sql as sql_mod
-    from spectate.observations import all_watchers, clear_registry
-
-    clear_registry()
-    importlib.reload(sql_mod)
     assert any(w.name == "sql" for w in all_watchers())
 
 
