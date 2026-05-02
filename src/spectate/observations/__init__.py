@@ -1,3 +1,4 @@
+from spectate.observations.aggregate import WatcherError, aggregate
 from spectate.observations.observation import UNRESOLVED, Observation
 from spectate.observations.watcher import (
     Watcher,
@@ -10,6 +11,8 @@ __all__ = [
     "UNRESOLVED",
     "Observation",
     "Watcher",
+    "WatcherError",
+    "aggregate",
     "all_watchers",
     "clear_registry",
     "register_watcher",
