@@ -17,12 +17,29 @@ from spectate.spec.models import (
     UnresolvedHandling,
     load_schema,
 )
+from spectate.spec.update import (
+    Change,
+    Conflict,
+    DeltaError,
+    Diff,
+    EffectKey,
+    apply_diff,
+    compute_diff,
+    format_diff,
+    parse_yaml,
+    to_yaml,
+)
 from spectate.spec.validate import SpecError, ValidationResult, validate
 
 __all__ = [
     "SCHEMA_PATH",
+    "Change",
     "ClaudeNotFoundError",
+    "Conflict",
     "DbSection",
+    "DeltaError",
+    "Diff",
+    "EffectKey",
     "EffectSlots",
     "EnvSection",
     "FsSection",
@@ -36,6 +53,11 @@ __all__ = [
     "SpecError",
     "UnresolvedHandling",
     "ValidationResult",
+    "apply_diff",
+    "compute_diff",
+    "format_diff",
     "load_schema",
+    "parse_yaml",
+    "to_yaml",
     "validate",
 ]
