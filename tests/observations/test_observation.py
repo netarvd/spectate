@@ -36,3 +36,27 @@ def test_unresolved_sentinel_detected() -> None:
     unresolved = Observation("subprocess", UNRESOLVED, Path("x.py"), 1)
     assert not resolved.is_unresolved
     assert unresolved.is_unresolved
+
+
+def test_observation_metadata_default_empty() -> None:
+    obs = Observation("imports", "os", Path("x.py"), 1)
+    assert obs.metadata == {}
+
+
+def test_observation_metadata_carries_kv_pairs() -> None:
+    obs = Observation(
+        "db.read",
+        UNRESOLVED,
+        Path("x.py"),
+        1,
+        metadata={"unresolved_reason": "parse_failed"},
+    )
+    assert obs.metadata == {"unresolved_reason": "parse_failed"}
+
+
+def test_metadata_does_not_affect_identity_or_hash() -> None:
+    a = Observation("imports", "os", Path("x.py"), 1)
+    b = Observation("imports", "os", Path("x.py"), 1, metadata={"reason": "anything"})
+    assert a == b
+    assert hash(a) == hash(b)
+    assert {a, b} == {a}

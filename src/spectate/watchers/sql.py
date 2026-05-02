@@ -91,7 +91,7 @@ def _emit(tree: ast.Module, path: Path) -> Iterator[Observation]:
                 parameter=UNRESOLVED,
                 file=path,
                 line=line,
-                tags=("unresolved:non-literal",),
+                metadata={"unresolved_reason": "non-literal"},
             )
             continue
         yield from _classify_sql(sql, path, line)
@@ -120,7 +120,7 @@ def _classify_sql(sql: str, path: Path, line: int) -> Iterator[Observation]:
             parameter=UNRESOLVED,
             file=path,
             line=line,
-            tags=("unresolved:parse-error",),
+            metadata={"unresolved_reason": "parse-error"},
         )
         return
     emitted = False
@@ -136,7 +136,7 @@ def _classify_sql(sql: str, path: Path, line: int) -> Iterator[Observation]:
             parameter=UNRESOLVED,
             file=path,
             line=line,
-            tags=("unresolved:no-tables",),
+            metadata={"unresolved_reason": "no-tables"},
         )
 
 
@@ -147,7 +147,7 @@ def _classify_statement(stmt: exp.Expression, path: Path, line: int) -> Iterator
             parameter=UNRESOLVED,
             file=path,
             line=line,
-            tags=("unresolved:unsupported-statement",),
+            metadata={"unresolved_reason": "unsupported-statement"},
         )
         return
 

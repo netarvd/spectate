@@ -47,3 +47,4 @@ This is a project-wide working rule. See `CLAUDE.md`.
 | [0005](0005-spec-init-flow-decisions.md) | `spec init` flow — skill packaging, invocation, and overwrite semantics | Accepted |
 | [0006](0006-spec-update-flow-decisions.md) | `spec update` flow — skill, conflict UX, equivalence, and bootstrap behavior | Accepted |
 | [0007](0007-ast-only-watcher-detection.md) | AST-only Watcher detection at v1; Semgrep deferred | Accepted |
+| [0008](0008-observation-metadata-vs-tags.md) | `Observation` carries `tags` (labels) and `metadata` (kind=value pairs) as separate fields | Accepted |

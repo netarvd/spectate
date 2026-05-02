@@ -13,6 +13,7 @@ class Observation:
     file: Path
     line: int
     tags: tuple[str, ...] = field(default_factory=tuple)
+    metadata: dict[str, str] = field(default_factory=dict, hash=False, compare=False)
 
     @property
     def is_unresolved(self) -> bool:
