@@ -199,12 +199,8 @@ def test_watcher_name() -> None:
 
 
 def test_registered_on_import() -> None:
-    # The module-level register_watcher() call runs at import time. To make
-    # this robust against test-order-dependent registry resets, re-register
-    # explicitly and assert the registry contains us.
-    from spectate.observations import all_watchers, register_watcher
+    from spectate.observations import all_watchers
 
-    register_watcher(ImportsWatcher())
     assert any(w.name == "imports" for w in all_watchers())
 
 

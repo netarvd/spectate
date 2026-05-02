@@ -1,20 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
 
-from spectate.observations import UNRESOLVED, Observation, clear_registry
+from spectate.observations import UNRESOLVED, Observation
 from spectate.watchers.network import NetworkWatcher, _normalize_host
-
-
-@pytest.fixture(autouse=True)
-def _isolated_registry() -> Iterable[None]:
-    clear_registry()
-    yield
-    clear_registry()
 
 
 def _write(tmp_path: Path, source: str) -> Path:
@@ -163,13 +155,8 @@ def test_observe_handles_syntax_error(tmp_path: Path) -> None:
 
 
 def test_module_registers_watcher() -> None:
-    import importlib
-
-    import spectate.watchers.network as mod
     from spectate.observations import all_watchers
 
-    clear_registry()
-    importlib.reload(mod)
     names = [w.name for w in all_watchers()]
     assert "network" in names
 

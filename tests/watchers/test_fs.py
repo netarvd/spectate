@@ -1,19 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path
 
-import pytest
-
-from spectate.observations import UNRESOLVED, Observation, clear_registry
+from spectate.observations import UNRESOLVED, Observation
 from spectate.watchers.fs import FsWatcher
-
-
-@pytest.fixture(autouse=True)
-def _isolated_registry() -> Iterable[None]:
-    clear_registry()
-    yield
-    clear_registry()
 
 
 def _run(tmp_path: Path, source: str) -> list[Observation]:
