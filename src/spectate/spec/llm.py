@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 CLAUDE_INSTALL_URL = "https://docs.claude.com/claude-code"
-SKILL_NAME = "spec-init"
+DEFAULT_SKILL_NAME = "spec-init"
 SKILL_PACKAGE = "spectate.skills"
 
 
@@ -32,38 +32,40 @@ class LLMClient(Protocol):
     def generate_spec(self, english: str) -> str: ...
 
 
-def _materialize_skill_layout(dest_root: Path) -> Path:
-    """Lay out the bundled skill under `<dest_root>/.claude/skills/<SKILL_NAME>/`.
+def _materialize_skill_layout(dest_root: Path, skill_name: str) -> Path:
+    """Lay out the bundled skill under `<dest_root>/.claude/skills/<skill_name>/`.
 
     Claude Code auto-loads skills nested under a `--add-dir` target's
-    `.claude/skills/` directory. We ship the skill as a regular package
-    subdirectory (`spectate/skills/spec-init/`) so hatchling packages it
-    cleanly, then materialize the dotfile layout that `claude` expects on
-    first use.
+    `.claude/skills/` directory. We ship skills as regular package
+    subdirectories (`spectate/skills/<skill_name>/`) so hatchling packages
+    them cleanly, then materialize the dotfile layout that `claude` expects
+    on first use.
     """
     skills_root = dest_root / ".claude" / "skills"
-    target = skills_root / SKILL_NAME
+    target = skills_root / skill_name
     if target.exists():
         return dest_root
     skills_root.mkdir(parents=True, exist_ok=True)
-    src = resources.files(SKILL_PACKAGE).joinpath(SKILL_NAME)
+    src = resources.files(SKILL_PACKAGE).joinpath(skill_name)
     with resources.as_file(src) as src_path:
         shutil.copytree(src_path, target)
     return dest_root
 
 
 class SkillClient:
-    """Invokes the bundled `spec-init` Claude Code skill via `claude -p`."""
+    """Invokes a bundled Spectate Claude Code skill via `claude -p`."""
 
     def __init__(
         self,
         claude_bin: str = "claude",
         skill_dir: Path | None = None,
         timeout: float | None = 180.0,
+        skill: str = DEFAULT_SKILL_NAME,
     ) -> None:
         self._claude_bin = claude_bin
         self._skill_dir_override = skill_dir
         self._timeout = timeout
+        self._skill = skill
         self._materialized: Path | None = None
 
     def _resolve_claude(self) -> str:
@@ -78,14 +80,14 @@ class SkillClient:
         if self._materialized is None:
             cache_root = Path(tempfile.gettempdir()) / "spectate-skill-cache"
             cache_root.mkdir(parents=True, exist_ok=True)
-            self._materialized = _materialize_skill_layout(cache_root)
+            self._materialized = _materialize_skill_layout(cache_root, self._skill)
         return self._materialized
 
     def _build_argv(self, claude_path: str, skill_dir: Path, english: str) -> list[str]:
         prompt = (
-            "Use the spec-init skill to convert the following English description "
+            f"Use the {self._skill} skill to convert the following input "
             "into a Spectate Spec YAML. Emit YAML only, no prose, no code fences.\n\n"
-            f"Description: {english}"
+            f"{english}"
         )
         argv = [
             claude_path,
