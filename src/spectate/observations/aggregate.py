@@ -21,6 +21,16 @@ class WatcherError(RuntimeWarning):
     """Emitted when a Watcher raises while observing a file."""
 
 
+class EmptyWatcherRegistryError(RuntimeError):
+    """Raised when `aggregate` is called with the default registry but no
+    Watchers have been registered.
+
+    The fix is almost always `import spectate.watchers` at the entry point,
+    which triggers each Watcher module to register itself. Pass
+    `watchers=()` explicitly if you really want a no-op scan.
+    """
+
+
 def aggregate(path: Path, *, watchers: Iterable[Watcher] | None = None) -> tuple[Observation, ...]:
     """Run Watchers across `path` and return a sorted, deduped tuple.
 
@@ -31,8 +41,11 @@ def aggregate(path: Path, *, watchers: Iterable[Watcher] | None = None) -> tuple
     directories are skipped to avoid cycles.
 
     `watchers` defaults to `all_watchers()`. The default registry is only
-    populated by importing `spectate.watchers`; callers wanting the full
-    set must ensure that import has happened.
+    populated by importing `spectate.watchers`; if it's empty when
+    `watchers` is left at its default, `EmptyWatcherRegistryError` is
+    raised so the missing-import footgun fails loudly instead of
+    silently returning zero Observations. Pass `watchers=()` to opt
+    into a no-op scan.
 
     Observations are deduped on identity `(category, parameter, file, line,
     tags)` per ADR-0008. Metadata of duplicates is merged by union; on key
@@ -41,8 +54,18 @@ def aggregate(path: Path, *, watchers: Iterable[Watcher] | None = None) -> tuple
     A Watcher that raises while observing a file does not abort the scan —
     a `WatcherError` warning is emitted and the scan continues.
     """
+    if watchers is None:
+        selected = all_watchers()
+        if not selected:
+            raise EmptyWatcherRegistryError(
+                "aggregate() was called with the default watcher registry but no "
+                "Watchers are registered. Add `import spectate.watchers` at your "
+                "entry point to auto-register the built-in Watchers, or pass "
+                "`watchers=()` if you intentionally want a no-op scan."
+            )
+    else:
+        selected = tuple(watchers)
     files = _collect_files(path)
-    selected = tuple(watchers) if watchers is not None else all_watchers()
     merged: dict[tuple[object, ...], Observation] = {}
     for file in files:
         for watcher in selected:

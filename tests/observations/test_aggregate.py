@@ -8,9 +8,11 @@ import pytest
 
 import spectate.watchers  # noqa: F401  — populates the default registry
 from spectate.observations import (
+    EmptyWatcherRegistryError,
     Observation,
     WatcherError,
     aggregate,
+    clear_registry,
     register_watcher,
 )
 
@@ -210,3 +212,20 @@ def test_directory_with_unparseable_file_skips_silently(
     out = aggregate(tmp_path)
     params = {o.parameter for o in out}
     assert "json" in params
+
+
+def test_empty_registry_with_default_watchers_raises(tmp_path: Path) -> None:
+    target = tmp_path / "x.py"
+    target.write_text("import os\n")
+    clear_registry()
+    with pytest.raises(EmptyWatcherRegistryError) as exc_info:
+        aggregate(target)
+    assert "import spectate.watchers" in str(exc_info.value)
+    assert "watchers=()" in str(exc_info.value)
+
+
+def test_empty_registry_with_explicit_empty_watchers_is_a_no_op(tmp_path: Path) -> None:
+    target = tmp_path / "x.py"
+    target.write_text("import os\n")
+    clear_registry()
+    assert aggregate(target, watchers=()) == ()
