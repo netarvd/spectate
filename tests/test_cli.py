@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json as _json
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -530,16 +531,160 @@ def test_spec_transcribe_confirm_yes_writes(tmp_path: Path, _stub_aggregate: Non
     assert out.exists()
 
 
-def test_review_with_path() -> None:
-    result = runner.invoke(app, ["review", "./src"])
-    assert result.exit_code == 0
-    assert PLACEHOLDER in result.stdout
+REVIEW_SPEC_CLEAN = """version: 1
+imports:
+  allowed:
+    - os
+    - sys
+"""
+
+REVIEW_SPEC_DRIFT = """version: 1
+imports:
+  allowed:
+    - os
+"""
+
+REVIEW_SPEC_REQUIRED = """version: 1
+imports:
+  required:
+    - requests
+"""
 
 
-def test_review_default_path() -> None:
-    result = runner.invoke(app, ["review"])
+@pytest.fixture(autouse=True)
+def _ensure_watchers_registered() -> None:
+    """Other test modules call clear_registry(); ensure ours start populated."""
+    import importlib
+
+    from spectate.observations.watcher import all_watchers
+
+    if not all_watchers():
+        for name in (
+            "spectate.watchers.env",
+            "spectate.watchers.fs",
+            "spectate.watchers.imports_",
+            "spectate.watchers.network",
+            "spectate.watchers.sql",
+            "spectate.watchers.subprocess_",
+        ):
+            importlib.reload(importlib.import_module(name))
+
+
+def _write_sample_project(tmp_path: Path) -> Path:
+    src = tmp_path / "proj"
+    src.mkdir()
+    (src / "code.py").write_text("import os\nimport sys\n")
+    return src
+
+
+def test_review_clean_spec_exits_zero(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_CLEAN)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec)])
+    assert result.exit_code == 0, result.stdout + result.stderr
+    out = result.stdout.lower()
+    assert "within-spec" in out or "no drift" in out
+
+
+def test_review_drift_exits_one(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_DRIFT)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec)])
+    assert result.exit_code == 1
+    assert "added-unspecified" in result.stdout or "sys" in result.stdout
+
+
+def test_review_json_emits_valid_json(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_DRIFT)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec), "--json"])
+    assert result.exit_code == 1
+    payload = _json.loads(result.stdout)
+    assert payload["schema_version"] == 1
+    assert "findings" in payload
+
+
+def test_review_markdown_emits_markdown(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_DRIFT)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec), "--markdown"])
+    assert result.exit_code == 1
+    assert "Spectate" in result.stdout or "<details>" in result.stdout
+
+
+def test_review_fail_on_added_ignores_missing_required(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    # required + allowed: requests required (missing), os/sys allowed (clean).
+    spec.write_text(
+        "version: 1\nimports:\n  required:\n    - requests\n  allowed:\n    - os\n    - sys\n"
+    )
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec), "--fail-on", "added"])
+    assert result.exit_code == 0, result.stdout + result.stderr
+
+
+def test_review_fail_on_missing_only_with_missing_required_exits_one(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(
+        "version: 1\nimports:\n  required:\n    - requests\n  allowed:\n    - os\n    - sys\n"
+    )
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec), "--fail-on", "missing"])
+    assert result.exit_code == 1
+
+
+def test_review_missing_spec_exits_two(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "nope.yaml"
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec)])
+    assert result.exit_code == 2
+    assert "No Spec" in result.stderr or "No Spec" in result.stdout
+
+
+def test_review_invalid_spec_exits_one(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(INVALID_YAML)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec)])
+    assert result.exit_code == 1
+    assert "invalid" in (result.stderr + result.stdout).lower()
+
+
+def test_review_mutually_exclusive_flags_exit_two(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_CLEAN)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec), "--json", "--markdown"])
+    assert result.exit_code == 2
+    assert "mutually exclusive" in (result.stderr + result.stdout)
+
+
+def test_review_missing_path_exits_two(tmp_path: Path) -> None:
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_CLEAN)
+    result = runner.invoke(app, ["review", str(tmp_path / "nonexistent"), "--spec", str(spec)])
+    assert result.exit_code == 2
+
+
+def test_review_invalid_fail_on_exits_two(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_CLEAN)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec), "--fail-on", "bogus"])
+    assert result.exit_code == 2
+
+
+def test_review_quiet_suppresses_within_spec(tmp_path: Path) -> None:
+    proj = _write_sample_project(tmp_path)
+    spec = tmp_path / "spec.yaml"
+    spec.write_text(REVIEW_SPEC_CLEAN)
+    result = runner.invoke(app, ["review", str(proj), "--spec", str(spec), "--quiet"])
     assert result.exit_code == 0
-    assert PLACEHOLDER in result.stdout
+    assert "within-spec" not in result.stdout
 
 
 def test_accept() -> None:

@@ -394,10 +394,110 @@ def spec_transcribe(
     typer.echo(f"Wrote {output}")
 
 
+_DEFAULT_REVIEW_PATH = Path()  # current directory
+_REVIEW_PATH_ARGUMENT = typer.Argument(_DEFAULT_REVIEW_PATH, help="Path to review.")
+_REVIEW_SPEC_OPTION = typer.Option(
+    DEFAULT_SPEC_PATH,
+    "--spec",
+    "-s",
+    help="Path to the Spec YAML.",
+)
+_REVIEW_JSON_OPTION = typer.Option(False, "--json", help="Emit JSON Bulletin.")
+_REVIEW_MARKDOWN_OPTION = typer.Option(
+    False, "--markdown", help="Emit markdown Bulletin (PR-comment ready)."
+)
+_REVIEW_QUIET_OPTION = typer.Option(
+    False, "--quiet", "-q", help="Suppress within-spec section (terminal mode)."
+)
+_REVIEW_FAIL_ON_OPTION = typer.Option(
+    "both",
+    "--fail-on",
+    help="Which buckets cause non-zero exit: added | missing | both.",
+)
+_REVIEW_NO_COLOR_OPTION = typer.Option(
+    False, "--no-color", help="Disable color in terminal output."
+)
+
+
 @app.command("review")
-def review(path: str = typer.Argument(".", help="Path to review.")) -> None:
+def review(
+    path: Path = _REVIEW_PATH_ARGUMENT,
+    spec: Path = _REVIEW_SPEC_OPTION,
+    json: bool = _REVIEW_JSON_OPTION,
+    markdown: bool = _REVIEW_MARKDOWN_OPTION,
+    quiet: bool = _REVIEW_QUIET_OPTION,
+    fail_on: str = _REVIEW_FAIL_ON_OPTION,
+    no_color: bool = _REVIEW_NO_COLOR_OPTION,
+) -> None:
     """Watch + Critique + Bulletin in one command."""
-    typer.echo("not implemented yet")
+    import sys
+    from dataclasses import replace
+
+    import spectate.watchers  # noqa: F401  populates the Watcher registry
+    from spectate.bulletin import render_json, render_markdown, render_terminal
+    from spectate.critique.diff import critique
+    from spectate.critique.expected import compile_spec
+    from spectate.observations.aggregate import aggregate
+
+    if json and markdown:
+        typer.echo("--json and --markdown are mutually exclusive.", err=True)
+        raise typer.Exit(code=2)
+
+    if fail_on not in {"added", "missing", "both"}:
+        typer.echo(
+            f"--fail-on must be one of: added, missing, both (got {fail_on!r}).",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    if not spec.exists():
+        typer.echo(
+            f"No Spec at {spec}. Run `spectate spec init` first, or pass --spec.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    spec_text = spec.read_text()
+    result = validate(spec_text)
+    if not result.ok:
+        typer.echo(f"Spec at {spec} is invalid:", err=True)
+        for err in result.errors:
+            line = f"  {err.path}: {err.message}"
+            if err.suggestion:
+                line += f"  ({err.suggestion})"
+            typer.echo(line, err=True)
+        raise typer.Exit(code=1)
+    assert result.spec is not None
+    spec_obj = result.spec
+
+    if not path.exists():
+        typer.echo(f"Path not found: {path}", err=True)
+        raise typer.Exit(code=2)
+
+    observations = aggregate(path)
+    matchers = compile_spec(spec_obj)
+    findings = critique(observations, matchers)
+
+    if json:
+        output = render_json(findings)
+    elif markdown:
+        output = render_markdown(findings)
+    else:
+        findings_for_render = replace(findings, within_spec=()) if quiet else findings
+        color = False if no_color else sys.stdout.isatty()
+        output = render_terminal(findings_for_render, color=color)
+
+    typer.echo(output)
+
+    fail_added = fail_on in {"added", "both"}
+    fail_missing = fail_on in {"missing", "both"}
+    offending = False
+    if fail_missing and findings.missing_required:
+        offending = True
+    if fail_added and (findings.added_forbidden or findings.added_unspecified):
+        offending = True
+    if offending:
+        raise typer.Exit(code=1)
 
 
 @app.command("accept")
