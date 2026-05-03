@@ -42,6 +42,7 @@ dev = [
 
 [project.scripts]
 spectate = "spectate.cli:app"
+spectate-cc-hook = "spectate.hooks.claude_code:main"
 
 [project.urls]
 Homepage = "https://github.com/netaarvd/spectate"
