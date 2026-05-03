@@ -101,3 +101,6 @@ minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers --strict-config"
 pythonpath = ["src"]
+markers = [
+    "e2e: end-to-end demo fixture tests that spawn the spectate CLI as a subprocess",
+]

@@ -1,0 +1,9 @@
+version: 1
+
+# Stale spec: code below imports `pydantic`, which the spec author forgot to
+# declare. Spectate flags it as added-unspecified. A future "stale-spec
+# suggestion" UX would recommend adding pydantic to allowed; that's not yet
+# implemented.
+imports:
+  allowed:
+    - requests
