@@ -30,3 +30,22 @@ pytest
 
 spectate --help
 ```
+
+## Use as a pre-commit hook
+
+Spectate ships a `pre-commit-hooks.yaml` so consumers can run `spectate review`
+on every commit. Add to your `.pre-commit-config.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/netaarvd/spectate
+    rev: v0.0.1  # pin to a release tag
+    hooks:
+      - id: spectate-review
+```
+
+The hook installs Spectate into pre-commit's managed environment
+(`language: python`), so consumers do not need a global install. It runs at
+the `pre-commit` stage and exits non-zero on any drift, matching the CLI's
+default `--fail-on both` behaviour.
+

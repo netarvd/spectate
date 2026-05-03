@@ -500,10 +500,78 @@ def review(
         raise typer.Exit(code=1)
 
 
+_ACCEPT_SPEC_OPTION = typer.Option(
+    DEFAULT_SPEC_PATH,
+    "--spec",
+    "-s",
+    help="Path to the Spec YAML.",
+)
+_ACCEPT_REASON_OPTION = typer.Option(
+    None,
+    "--reason",
+    "-r",
+    help="Optional rationale recorded alongside the accept (echoed only).",
+)
+_ACCEPT_PATH_OPTION = typer.Option(
+    Path(),
+    "--path",
+    "-p",
+    help="Path to scan for Observations.",
+)
+
+
 @app.command("accept")
-def accept(finding_id: str = typer.Argument(..., help="Finding ID to accept.")) -> None:
+def accept(
+    finding_id: str = typer.Argument(..., help="Finding ID to accept."),
+    spec: Path = _ACCEPT_SPEC_OPTION,
+    reason: str | None = _ACCEPT_REASON_OPTION,
+    path: Path = _ACCEPT_PATH_OPTION,
+) -> None:
     """Accept a Finding into the Spec."""
-    typer.echo("not implemented yet")
+    import spectate.watchers  # noqa: F401  populates the Watcher registry
+    from spectate.critique.diff import critique
+    from spectate.critique.expected import compile_spec
+    from spectate.observations.aggregate import aggregate
+    from spectate.spec.accept import AcceptError, accept_finding
+
+    if not spec.exists():
+        typer.echo(f"No Spec at {spec}.", err=True)
+        raise typer.Exit(code=2)
+
+    spec_text = spec.read_text()
+    result = validate(spec_text)
+    if not result.ok:
+        typer.echo(f"Spec at {spec} is invalid:", err=True)
+        for err in result.errors:
+            typer.echo(f"  {err.path}: {err.message}", err=True)
+        raise typer.Exit(code=1)
+    assert result.spec is not None
+    spec_obj = result.spec
+
+    if not path.exists():
+        typer.echo(f"Path not found: {path}", err=True)
+        raise typer.Exit(code=2)
+
+    observations = aggregate(path)
+    matchers = compile_spec(spec_obj)
+    findings = critique(observations, matchers)
+
+    target = next((f for f in findings.all() if f.id == finding_id), None)
+    if target is None:
+        typer.echo(f"Finding not found: {finding_id}", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        new_spec = accept_finding(spec_obj, target)
+    except AcceptError as exc:
+        typer.echo(f"Cannot accept {finding_id}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    yaml_text = spec_to_yaml(new_spec)
+    spec.write_text(yaml_text)
+    typer.echo(f"Accepted {finding_id} ({target.kind}) into {spec}.")
+    if reason:
+        typer.echo(f"Reason: {reason}")
 
 
 if __name__ == "__main__":

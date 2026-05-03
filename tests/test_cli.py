@@ -687,7 +687,93 @@ def test_review_quiet_suppresses_within_spec(tmp_path: Path) -> None:
     assert "within-spec" not in result.stdout
 
 
-def test_accept() -> None:
-    result = runner.invoke(app, ["accept", "F-001"])
+def _write_accept_project(tmp_path: Path) -> tuple[Path, Path]:
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "code.py").write_text("import os\nimport requests\n")
+    spec = tmp_path / "spec.yaml"
+    spec.write_text("version: 1\nimports:\n  allowed:\n    - os\n")
+    return proj, spec
+
+
+def _accept_finding_id(proj: Path, spec: Path, parameter: str) -> str:
+    from spectate.critique.diff import critique
+    from spectate.critique.expected import compile_spec
+    from spectate.observations.aggregate import aggregate
+    from spectate.spec import validate as _validate
+
+    res = _validate(spec.read_text())
+    assert res.spec is not None
+    findings = critique(aggregate(proj), compile_spec(res.spec))
+    for f in findings.all():
+        if f.observation is not None and f.observation.parameter == parameter:
+            return f.id
+    raise AssertionError(f"no finding for {parameter}")
+
+
+def test_accept_success_writes_spec(tmp_path: Path) -> None:
+    proj, spec = _write_accept_project(tmp_path)
+    fid = _accept_finding_id(proj, spec, "requests")
+    result = runner.invoke(
+        app,
+        ["accept", fid, "--spec", str(spec), "--path", str(proj)],
+    )
+    assert result.exit_code == 0, result.stdout + (result.stderr or "")
+    body = spec.read_text()
+    assert "requests" in body
+    assert "Accepted" in result.stdout
+
+
+def test_accept_unknown_finding_exits_one(tmp_path: Path) -> None:
+    proj, spec = _write_accept_project(tmp_path)
+    result = runner.invoke(
+        app,
+        ["accept", "F-deadbeef0000", "--spec", str(spec), "--path", str(proj)],
+    )
+    assert result.exit_code == 1
+    assert "not found" in (result.stdout + (result.stderr or ""))
+
+
+def test_accept_missing_spec_exits_two(tmp_path: Path) -> None:
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    spec = tmp_path / "nope.yaml"
+    result = runner.invoke(
+        app,
+        ["accept", "F-x", "--spec", str(spec), "--path", str(proj)],
+    )
+    assert result.exit_code == 2
+
+
+def test_accept_reason_is_echoed(tmp_path: Path) -> None:
+    proj, spec = _write_accept_project(tmp_path)
+    fid = _accept_finding_id(proj, spec, "requests")
+    result = runner.invoke(
+        app,
+        [
+            "accept",
+            fid,
+            "--spec",
+            str(spec),
+            "--path",
+            str(proj),
+            "--reason",
+            "needed for outbound API",
+        ],
+    )
     assert result.exit_code == 0
-    assert PLACEHOLDER in result.stdout
+    assert "needed for outbound API" in result.stdout
+
+
+def test_accept_writes_roundtrippable_yaml(tmp_path: Path) -> None:
+    from spectate.spec import validate as _validate
+
+    proj, spec = _write_accept_project(tmp_path)
+    fid = _accept_finding_id(proj, spec, "requests")
+    result = runner.invoke(
+        app,
+        ["accept", fid, "--spec", str(spec), "--path", str(proj)],
+    )
+    assert result.exit_code == 0
+    res = _validate(spec.read_text())
+    assert res.ok

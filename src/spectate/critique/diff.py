@@ -19,12 +19,16 @@ does not show up as missing.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from spectate.critique.expected import RequiredKey, SpecMatchers
 from spectate.observations.observation import Observation
+
+INLINE_IGNORE_MARKER = "# spectate: ignore"
 
 FindingKind = Literal[
     "missing-required",
@@ -51,6 +55,26 @@ class Finding:
     observation: Observation | None
     required_key: RequiredKey | None
     severity: Severity
+
+    @property
+    def id(self) -> str:
+        """Stable short hash derived from (kind, category, parameter, file, line).
+
+        For Observation-bearing Findings, those fields come from the
+        Observation. For ``missing-required`` Findings (no Observation), the
+        category/parameter come from the ``RequiredKey`` and file/line are the
+        empty string and 0 respectively. The result is the first 12 hex chars
+        of a SHA-256, prefixed with ``F-`` for human readability.
+        """
+        if self.observation is not None:
+            obs = self.observation
+            parts = (self.kind, obs.category, obs.parameter, obs.file.as_posix(), str(obs.line))
+        else:
+            key = self.required_key
+            assert key is not None
+            parts = (self.kind, key.category, key.parameter, key.scope or "", "0")
+        digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
+        return f"F-{digest[:12]}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +121,11 @@ def critique(observations: Iterable[Observation], matchers: SpecMatchers) -> Fin
 
     seen_required: set[RequiredKey] = set()
 
+    file_line_cache: dict[Path, list[str]] = {}
+
     for obs in observations:
+        if _is_inline_ignored(obs, file_line_cache):
+            continue
         if obs.is_unresolved:
             unresolved_bucket.append(_make("unresolved", obs=obs, key=None))
             continue
@@ -136,6 +164,27 @@ def _obs_sort_key(f: Finding) -> tuple[str, str, str, int]:
     obs = f.observation
     assert obs is not None
     return (obs.category, obs.parameter, str(obs.file), obs.line)
+
+
+def _is_inline_ignored(obs: Observation, cache: dict[Path, list[str]]) -> bool:
+    """Return True if the source line ends with ``# spectate: ignore``.
+
+    Reads the source file lazily and caches per file. Returns False on any
+    IO error (missing file, decode error, line out of range) — silently, to
+    avoid making the Critique fragile to file-system races.
+    """
+    if obs.line <= 0:
+        return False
+    lines = cache.get(obs.file)
+    if lines is None:
+        try:
+            lines = obs.file.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+        cache[obs.file] = lines
+    if obs.line > len(lines):
+        return False
+    return lines[obs.line - 1].rstrip().endswith(INLINE_IGNORE_MARKER)
 
 
 def _required_sort_key(key: RequiredKey | None) -> tuple[str, str, str]:

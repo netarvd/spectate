@@ -1,0 +1,8 @@
+- id: spectate-review
+  name: spectate review
+  description: Run spectate review against the working tree.
+  entry: spectate review
+  language: python
+  pass_filenames: false
+  stages: [pre-commit]
+  types: [python]
