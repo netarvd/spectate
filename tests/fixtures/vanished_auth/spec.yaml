@@ -1,0 +1,13 @@
+version: 1
+
+# Demo: an `auth` import must appear. Clean keeps it; violating drops it.
+# Note: per-handler scoping (ADR-0009) is file-only at v1, and the test
+# runner reviews clean.py and violating.py separately — using a per-handler
+# scope here would force the spec to enumerate both files and one entry
+# would always be missing for the file not under review. Use unscoped.
+imports:
+  required:
+    - auth
+  allowed:
+    - auth
+    - flask

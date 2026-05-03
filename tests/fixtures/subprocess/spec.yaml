@@ -1,0 +1,6 @@
+version: 1
+
+# Pure-Python Spec: no subprocess invocations allowed.
+imports:
+  allowed:
+    - subprocess

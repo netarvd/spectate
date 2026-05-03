@@ -1,0 +1,10 @@
+version: 1
+
+network:
+  outbound:
+    allowed:
+      - api.example.com
+
+imports:
+  allowed:
+    - requests

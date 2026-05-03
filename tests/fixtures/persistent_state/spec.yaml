@@ -1,0 +1,12 @@
+version: 1
+
+# Pure-compute Spec: reads from ./data only, no writes anywhere.
+fs:
+  read:
+    allowed:
+      - data/**
+      - ./data/**
+
+imports:
+  allowed:
+    - pathlib

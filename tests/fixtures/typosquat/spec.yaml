@@ -1,0 +1,7 @@
+version: 1
+
+# T12 popular-package allowlist not yet implemented; this fixture exercises
+# the basic added-unspecified path (typo `reqeusts` not in allowed list).
+imports:
+  allowed:
+    - requests
