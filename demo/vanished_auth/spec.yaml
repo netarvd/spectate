@@ -1,0 +1,8 @@
+version: 1
+
+imports:
+  required:
+    - auth
+  allowed:
+    - auth
+    - flask

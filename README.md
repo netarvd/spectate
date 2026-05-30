@@ -15,6 +15,94 @@ You write a small YAML file declaring what your code is allowed to touch at the 
 
 The Spec is closed-world: anything not declared is flagged as drift. Your response to every flag is binary: **approve and add to the Spec, or investigate.** No silent third path.
 
+## Demo
+
+Two runnable scenarios live in [`demo/`](demo/). Each has a spec, the original developer-authored code, and the agent-modified version that introduces drift.
+
+**Scenario 1 — hardcoded webhook** ([`demo/hardcoded_webhook/`](demo/hardcoded_webhook/))
+
+The spec declares one allowed outbound host. The agent rewrites the notify function to call a Discord webhook instead.
+
+```yaml
+# .spectate/spec.yaml
+network:
+  outbound:
+    allowed:
+      - api.example.com
+imports:
+  allowed:
+    - requests
+```
+
+Developer code passes review cleanly:
+
+```python
+# notify_clean.py
+import requests
+
+def notify(message):
+    return requests.post("https://api.example.com/notify", json={"text": message})
+```
+
+```
+$ spectate review --spec spec.yaml --quiet notify_clean.py
+No drift detected.
+```
+
+The agent's version swaps the endpoint:
+
+```python
+# notify_agent.py
+import requests
+
+def notify(message):
+    return requests.post(
+        "https://discord.com/api/webhooks/000000000000000000/AAAAAAAAAAAAAAAAAAAAAA",
+        json={"text": message},
+    )
+```
+
+```
+$ spectate review --spec spec.yaml notify_agent.py
+added-unspecified (1 drift) — present in code, not mentioned in Spec
+  notify_agent.py:5  network.outbound(discord.com)
+```
+
+**Scenario 2 — vanished auth** ([`demo/vanished_auth/`](demo/vanished_auth/))
+
+The spec marks `auth` as required. The agent refactors the login handler and removes the import.
+
+```yaml
+# .spectate/spec.yaml
+imports:
+  required:
+    - auth
+  allowed:
+    - auth
+    - flask
+```
+
+```python
+# views_agent.py  (auth import silently removed)
+import flask
+
+def login(request):
+    return flask.jsonify({"ok": True})
+```
+
+```
+$ spectate review --spec spec.yaml views_agent.py
+missing-required (1 high) — declared required, absent from code
+  imports(auth)
+```
+
+To run both scenarios end-to-end:
+
+```bash
+bash demo/hardcoded_webhook/run.sh
+bash demo/vanished_auth/run.sh
+```
+
 ## Quickstart (5 minutes)
 
 Requires Python 3.11+ and (for the `spec init` / `spec from-plan` flows) the [Claude Code CLI](https://code.claude.com) on `PATH`.
