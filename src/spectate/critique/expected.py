@@ -96,9 +96,9 @@ class _CategoryMatchers:
     required: list[tuple[RequiredKey, str, _ScopeMatcher]] = field(default_factory=list)
     allowed_patterns: list[str] = field(default_factory=list)
     forbidden_patterns: list[str] = field(default_factory=list)
-    allowed_pathspec: PathSpec[GitWildMatchPattern] | None = None
-    forbidden_pathspec: PathSpec[GitWildMatchPattern] | None = None
-    required_pathspec: PathSpec[GitWildMatchPattern] | None = None
+    allowed_pathspec: PathSpec | None = None
+    forbidden_pathspec: PathSpec | None = None
+    required_pathspec: PathSpec | None = None
     required_index: list[tuple[RequiredKey, _ScopeMatcher]] = field(default_factory=list)
 
 
@@ -115,7 +115,7 @@ def _host_matches(pattern: str, host: str) -> bool:
     return fnmatch.fnmatchcase(host.lower(), pattern.lower())
 
 
-def _build_pathspec(patterns: Iterable[str]) -> PathSpec[GitWildMatchPattern] | None:
+def _build_pathspec(patterns: Iterable[str]) -> PathSpec | None:
     items = [p for p in patterns if p]
     if not items:
         return None
